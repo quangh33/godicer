@@ -1,6 +1,6 @@
 # Package `friend` - Core Slicing Data Structures
 
-Package `friend` implements the mathematical foundation and fundamental data structures for range-based key slicing in Dicer. It is ported directly from Databricks Dicer's Scala codebase (`com.databricks.dicer.external.SliceKey`, `Slice`, and `com.databricks.dicer.friend.SliceMap`).
+Package `friend` implements the mathematical foundation and fundamental data structures for range-based key slicing in Dicer. It is ported directly from Databricks Dicer's Scala codebase (`com.databricks.dicer.external.SliceKey`, `Slice`, and `com.databricks.dicer.friend.SliceMap`, `Squid`).
 
 The primary purpose of this package is to provide **deterministic, gap-free, overlap-free, and lock-free O(log N) key-to-slice lookups in memory with sub-microsecond latency**.
 
@@ -19,6 +19,7 @@ The primary purpose of this package is to provide **deterministic, gap-free, ove
 | `intersectSlices` (2-pointer simultaneous scan) | `friend.IntersectSlices` | 100% |
 | `coalesceSlices` (Adjacent slice merging) | `friend.CoalesceSlices` | 100% |
 | `createFromOrderedDisjointEntries` & `GapEntry` | `friend.CreateFromOrderedDisjointEntries` | 100% |
+| `Squid` (Slicelet Incarnation UniQUe ID) | `friend.Squid` | 100% |
 
 ---
 
@@ -64,7 +65,23 @@ A `Slice` models a half-open key interval: `[LowInclusive .. HighExclusive)`.
 
 ---
 
-### 4. `SliceMap[T HasSlice]`
+### 4. `Squid` (Slicelet Incarnation UniQUe ID)
+A `Squid` uniquely identifies a specific running incarnation of a server pod.
+```go
+type Squid struct {
+    ResourceAddress    string    // Address used to route requests (e.g. "10.0.0.1:50051")
+    CreationTimeMillis int64     // Creation time in milliseconds since Unix epoch
+    ResourceUUID       string    // Globally unique ID (e.g. K8s Pod UID)
+}
+```
+
+#### Why not just use IP / Pod Name?
+In dynamic container environments (Kubernetes), Pod IP reuse is common. When a pod crashes and restarts, Kubernetes may assign it the exact same IP. 
+Without `Squid`, clients and assigners would incorrectly assume the pod is the same continuous instance with pre-warmed cache. `Squid` combines `Address + CreationTime + UUID` to guarantee distinction between historical and new incarnations.
+
+---
+
+### 5. `SliceMap[T HasSlice]`
 `SliceMap` manages an ordered, disjoint sequence of entries that completely partition the key space from `""` (`MinSliceKey`) to `+∞` (`InfinityKey`).
 
 #### Completeness Invariants (`ValidateCompleteSlices`)
@@ -94,7 +111,7 @@ Due to the completeness invariant, this lookup is guaranteed to locate the exact
 
 ---
 
-### 5. Advanced Slicing Operations
+### 6. Advanced Slicing Operations
 
 #### `IntersectSlices(left, right)`
 When the Assigner rebalances or splits keys (e.g., transitioning from `Generation G` to `Generation G+1`), it needs to compare the old slice map with the new slice map to identify how slices were redistributed.
@@ -102,7 +119,7 @@ When the Assigner rebalances or splits keys (e.g., transitioning from `Generatio
 
 #### `CoalesceSlices(sliceMap, equalVal, withSlice)`
 Merges contiguous adjacent slices that map to equivalent values/destinations.
-- Example: `[A .. B) -> Server1` and `[B .. C) -> Server1` are coalesced into `[A .. C) -> Server1`.
+- Example: `[A .. B) -> Squid1` and `[B .. C) -> Squid1` are coalesced into `[A .. C) -> Squid1`.
 
 #### `CreateFromOrderedDisjointEntries(entries)`
 Accepts an incomplete list of ordered disjoint slices, automatically detects missing ranges, fills them with unassigned `GapEntry` instances, and constructs a complete `SliceMap`.

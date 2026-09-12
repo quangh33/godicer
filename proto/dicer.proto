@@ -1,0 +1,148 @@
+syntax = "proto3";
+
+package dicer;
+
+option go_package = "github.com/quangh33/godicer/pkg/proto;dicerproto";
+
+// Range of keys in Dicer: [low_inclusive, high_exclusive).
+// If high_exclusive is not set or empty and is_high_infinity is true, it represents +Infinity.
+message SliceP {
+  bytes low_inclusive = 1;
+  optional bytes high_exclusive = 2;
+  bool is_high_infinity = 3;
+}
+
+// Globally unique identifier for a Slicelet incarnation (SQUID).
+message SquidP {
+  string resource_address = 1;
+  int64 creation_time_millis = 2;
+  int64 resource_uuid_high = 3;
+  int64 resource_uuid_low = 4;
+}
+
+// 128-bit Generation version for assignments.
+message GenerationP {
+  int64 incarnation = 1;
+  int64 number = 2;
+}
+
+// Request to transfer a subslice assignment between resources.
+message TransferP {
+  int32 id = 1;
+  int32 from_resource_id = 2;
+  optional int64 continuous_ownership_generation_number = 3;
+}
+
+// Annotation about a subslice continuously assigned to a resource.
+message SubsliceAnnotationP {
+  int32 resource_id = 1;
+  SliceP subslice = 2;
+  int64 generation_number = 3;
+  optional TransferP state_transfer = 4;
+}
+
+// Assignment of a Slice to one or more resources.
+message SliceAssignmentP {
+  SliceP slice = 1;
+  GenerationP generation = 2;
+  repeated int32 resource_indices = 3;
+  repeated SubsliceAnnotationP subslice_annotations = 4;
+  optional double primary_rate_load = 5;
+}
+
+// Full or diff assignment.
+message DiffAssignmentP {
+  GenerationP generation = 1;
+  repeated SliceAssignmentP slice_assignments = 2;
+  repeated SquidP resources = 3;
+  bool is_frozen = 4;
+  optional GenerationP diff_generation = 5;
+}
+
+// Sync assignment state between client/server and assigner.
+message SyncAssignmentStateP {
+  oneof state {
+    GenerationP known_generation = 1;
+    DiffAssignmentP known_assignment = 2;
+    bytes known_serialized_assignment = 3;
+  }
+}
+
+// Instruction for redirecting client requests.
+message RedirectP {
+  string address = 1;
+  bytes redirect_token = 2;
+}
+
+// Logical target descriptor for a sharded service.
+message TargetP {
+  string name = 1;
+  string kubernetes_cluster_uri = 2;
+  string instance_id = 3;
+}
+
+// Key-level load estimate.
+message KeyLoadP {
+  bytes slice_key = 1;
+  double underestimated_primary_rate_load = 2;
+}
+
+// Aggregate load measurements on a Slice replica.
+message SliceLoadP {
+  double primary_rate_load = 1;
+  int64 window_low_inclusive_seconds = 2;
+  int64 window_high_exclusive_seconds = 3;
+  SliceP slice = 4;
+  repeated KeyLoadP top_keys = 5;
+  int32 num_replicas = 6;
+}
+
+// Health and state reported by a Slicelet.
+message SliceletDataP {
+  enum State {
+    UNKNOWN = 0;
+    NOT_READY = 1;
+    RUNNING = 2;
+    TERMINATING = 3;
+  }
+
+  SquidP squid = 1;
+  State state = 2;
+  repeated SliceLoadP attributed_loads = 3;
+  optional SliceLoadP unattributed_load = 4;
+  optional GenerationP never_recalled_generation = 5;
+  repeated SquidP released_squids = 6;
+}
+
+// Clerk-specific telemetry or debug fields.
+message ClerkDataP {
+  string client_id = 1;
+}
+
+// Watch request sent by Clerk or Slicelet.
+message ClientRequestP {
+  TargetP target = 1;
+  SyncAssignmentStateP sync_assignment_state = 2;
+  string subscriber_debug_name = 3;
+  int64 chosen_rpc_timeout_millis = 4;
+
+  oneof subscriber_data {
+    ClerkDataP clerk_fields = 5;
+    SliceletDataP slicelet_fields = 6;
+  }
+
+  int64 version = 7;
+  bytes redirect_token = 8;
+}
+
+// Watch response returned by Assigner.
+message ClientResponseP {
+  SyncAssignmentStateP sync_assignment_state = 1;
+  int64 suggested_rpc_timeout_millis = 2;
+  RedirectP redirect = 3;
+}
+
+// Assigner Watch Service.
+service AssignmentService {
+  rpc Watch(ClientRequestP) returns (ClientResponseP);
+}
