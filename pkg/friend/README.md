@@ -194,5 +194,3 @@ BenchmarkLookUp-8   5830296   196.7 ns/op
 
 - Each binary search lookup takes **~196 nanoseconds**.
 - Capable of sustaining over **5,000,000 lookups/second per CPU core** in RAM.
-
-![Slice partitioning](../../img/slice.png)
