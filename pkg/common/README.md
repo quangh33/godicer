@@ -97,6 +97,8 @@ Located in `assignment.go`, `Assignment` represents the complete, immutable part
 - `GetAssignedSliceAssignments(resource friend.Squid) []SliceAssignment`: Retrieves all slice assignments allocated to `resource`.
 - `GetAssignedSlices(resource friend.Squid) []friend.Slice`: Retrieves the slice boundaries allocated to `resource`.
 
+![slice assignment](../../img/assignment.png)
+
 ---
 
 ## 5. Lock-Free Concurrency: `AtomicAssignmentCell`
